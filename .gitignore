@@ -112,3 +112,4 @@ opencode.json
 /.ci-logs
 /.codex/
 /tools/__pycache__
+/.vs
