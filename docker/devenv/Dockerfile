@@ -67,7 +67,7 @@ RUN set -ex; \
 FROM base AS setup-node
 
 ENV NODE_VERSION=v24.21.0 \
-    PNPM_VERSION=12.5.1 \
+    PNPM_VERSION=12.8.1 \
     PATH=/opt/node/bin:$PATH
 
 RUN set -eux; \
@@ -77,13 +77,13 @@ RUN set -eux; \
          OPENSSL_ARCH='linux-aarch64'; \
          BINARY_URL="https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-arm64.tar.gz"; \
          PNPM_ARCH='arm64'; \
-         PNPM_SHA256='84e1290e82c800acd406b6db27e9650e15db3c2344d12162cc305ea1f942c6ff'; \
+         PNPM_SHA256='75c5e34d3164fe3d3549580b1b1b59c9dd16543e558dec722b686193cdb7dfa1'; \
          ;; \
        amd64|x86_64) \
          OPENSSL_ARCH='linux-x86_64'; \
          BINARY_URL="https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.gz"; \
          PNPM_ARCH='x64'; \
-         PNPM_SHA256='5a397dfb6b3d4b07d3d7769586aeb471048faf04299a492e2808b95a9a1c701f'; \
+         PNPM_SHA256='db3906881f63e41b655e3b97d473603dc26326c2470d0b1b8083689e1bcbd1e8'; \
          ;; \
        *) \
          echo "Unsupported arch: ${ARCH}"; \
@@ -109,57 +109,29 @@ RUN set -eux; \
 
 FROM base AS setup-opencode
 
-ENV OPENCODE_VERSION=1.18.31
-
-RUN set -ex; \
-    ARCH="$(dpkg --print-architecture)"; \
-    case "${ARCH}" in \
-       aarch64|arm64) \
-         BINARY_URL="https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-arm64.tar.gz"; \
-         ;; \
-       amd64|x86_64) \
-         BINARY_URL="https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz"; \
-         ;; \
-       *) \
-         echo "Unsupported arch: ${ARCH}"; exit 1; \
-         ;; \
-    esac; \
-    curl -fsSL ${BINARY_URL} -o /tmp/opencode.tar.gz; \
-    mkdir -p /tmp/opencode; \
-    tar -xzf /tmp/opencode.tar.gz -C /tmp/opencode; \
-    chmod +x /tmp/opencode/opencode; \
-    rm -f /tmp/opencode.tar.gz;
-
-################################################################################
-## OPENCODE2 SETUP (V2, side-by-side with V1 `opencode`)
-################################################################################
-
-FROM base AS setup-opencode2
-
-ENV OPENCODE2_VERSION=2.0.16
+ENV OPENCODE_VERSION=2.0.21
 
 RUN set -eux; \
     ARCH="$(dpkg --print-architecture)"; \
     case "${ARCH}" in \
        aarch64|arm64) \
-         BINARY_URL="https://registry.npmjs.org/@opencode/cli-linux-arm64/-/cli-linux-arm64-${OPENCODE2_VERSION}.tgz"; \
-         ESUM='a132a041968b0fcea18824f2f1996f1494c26ad6e4c5be5ca5b9b96a2bb7922e'; \
+         BINARY_URL="https://registry.npmjs.org/@opencode/cli-linux-arm64/-/cli-linux-arm64-${OPENCODE_VERSION}.tgz"; \
+         ESUM='046c0e0e8eec8f6085d46c0eca29ece65fb00e21df0881c81cbcf7392458b1d2'; \
          ;; \
        amd64|x86_64) \
-         BINARY_URL="https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-${OPENCODE2_VERSION}.tgz"; \
-         ESUM='08221eb6a781354e9be3b3918ab5b7d91aff2f20739e7e2e0af81bcdc0822c8a'; \
+         BINARY_URL="https://registry.npmjs.org/@opencode/cli-linux-x64/-/cli-linux-x64-${OPENCODE_VERSION}.tgz"; \
+         ESUM='57db421ab689d6831178c84736ba1e667c9c27627866849a114fa57afbc81785'; \
          ;; \
        *) \
          echo "Unsupported arch: ${ARCH}"; exit 1; \
          ;; \
     esac; \
-    curl -LfsSo /tmp/opencode2.tgz "${BINARY_URL}"; \
-    echo "${ESUM} */tmp/opencode2.tgz" | sha256sum -c -; \
-    mkdir -p /tmp/opencode2; \
-    tar -xzf /tmp/opencode2.tgz -C /tmp/opencode2 --strip-components=2 package/bin; \
-    mv /tmp/opencode2/opencode /tmp/opencode2/opencode2; \
-    chmod +x /tmp/opencode2/opencode2; \
-    rm -f /tmp/opencode2.tgz;
+    curl -LfsSo /tmp/opencode.tgz "${BINARY_URL}"; \
+    echo "${ESUM} */tmp/opencode.tgz" | sha256sum -c -; \
+    mkdir -p /tmp/opencode; \
+    tar -xzf /tmp/opencode.tgz -C /tmp/opencode --strip-components=2 package/bin; \
+    chmod +x /tmp/opencode/opencode; \
+    rm -f /tmp/opencode.tgz;
 
 
 ################################################################################
@@ -526,7 +498,6 @@ RUN set -ex; \
       libjpeg62-turbo \
       libtiff6 \
       libwebp7 \
-      libopenexr-3-1-30 \
       libfreetype6 \
       libfontconfig1 \
       libglib2.0-0 \
@@ -576,7 +547,7 @@ ENV LANG='C.UTF-8' \
     SERENA_CONTEXT="claude-code" \
     PATH="/opt/jdk/bin:/opt/gh/bin:/opt/utils/bin:/opt/clojure/bin:/opt/node/bin:/opt/imagick/bin:/opt/cargo/bin:$PATH"
 
-COPY --from=penpotapp/imagemagick:7.1.2-27 /opt/imagick /opt/imagick
+COPY --from=penpotapp/imagemagick:7.1.2-27-1 /opt/imagick /opt/imagick
 COPY --from=setup-jvm /opt/jdk /opt/jdk
 COPY --from=setup-jvm /opt/clojure /opt/clojure
 COPY --from=setup-node /opt/node /opt/node
@@ -588,7 +559,6 @@ COPY --from=setup-rust /opt/rustup /opt/rustup
 COPY --from=setup-rust /opt/emsdk /opt/emsdk
 COPY --from=setup-caddy /usr/bin/caddy /usr/bin/caddy
 COPY --from=setup-opencode /tmp/opencode/opencode /opt/utils/bin/opencode
-COPY --from=setup-opencode2 /tmp/opencode2/opencode2 /opt/utils/bin/opencode2
 
 COPY files/nginx.conf /etc/nginx/nginx.conf
 COPY files/nginx-mime.types /etc/nginx/mime.types

@@ -60,8 +60,8 @@
 (def varia
   "Rest of the flags"
   #{:audit-log
-    :audit-log-archive
-    :audit-log-gc
+    ;; Enables shipping audit_log chunks to Nexus.
+    :nexus
     :audit-log-logger
     :auto-file-snapshot
     ;; enables the `/api/doc` endpoint that lists all the rpc methods available.
@@ -228,7 +228,11 @@
    :enable-available-viewer-wasm
    :enable-background-blur
    :enable-stroke-path
-   :enable-token-combobox])
+   :enable-stroke-per-side
+   :enable-token-combobox
+   :enable-custom-shortcuts
+   :enable-token-lib-sync
+   :enable-link-unfurl])
 
 (defn parse
   [& flags]
