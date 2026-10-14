@@ -17,7 +17,6 @@
    [app.common.time :as ct]
    [app.common.types.organization :as cto
     :refer [schema:nitrate-sso]]
-   [app.common.uri :as u]
    [app.config :as cf]
    [app.http.client :as http]
    [app.http.session :as session]
@@ -32,31 +31,17 @@
 ;; HELPERS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- join-path-segments
-  "Build a single relative path from Nitrate URI segments, normalizing slashes."
-  [segments]
-  (let [path (->> segments (map str) (str/join "/"))]
-    (->> (str/split path #"/")
-         (remove str/blank?)
-         (str/join "/"))))
-
-(defn- join-base-uri
-  "Join path segments to a base URI."
-  [base-uri & segments]
-  (u/join (u/ensure-path-slash base-uri)
-          (join-path-segments segments)))
-
 (defn- generate-nitrate-uri
   "Joins relative path segments to the Nitrate backend URI.
    Segments must not start with `/`"
   [& segments]
-  (apply join-base-uri (cf/get :admin-console-uri) segments))
+  (apply cf/join-uri (cf/get :admin-console-uri) segments))
 
 (defn- generate-public-uri
   "Joins relative path segments to the public backend URI.
    Segments must not start with `/`"
   [& segments]
-  (apply join-base-uri (cf/get :public-uri) segments))
+  (apply cf/get-public-uri segments))
 
 (defn- request-builder
   [cfg method uri shared-key profile-id request-params]
@@ -280,7 +265,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/organizations/"
-                       organization-id
+                       (str organization-id "/")
                        "members/"
                        profile-id)
                       schema:profile-organization params))
@@ -290,7 +275,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/teams/"
-                       team-id
+                       (str team-id "/")
                        "users/"
                        profile-id)
                       schema:profile-organization params))
@@ -300,7 +285,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/organizations/"
-                       organization-id
+                       (str organization-id "/")
                        "summary")
                       schema:organization-summary params))
 
@@ -309,7 +294,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/users/"
-                       profile-id
+                       (str profile-id "/")
                        "owned-organizations")
                       [:vector schema:organization-summary]
                       params))
@@ -329,7 +314,7 @@
   (let [organizations (request-to-nitrate cfg :get
                                           (generate-nitrate-uri
                                            "api/users/"
-                                           profile-id
+                                           (str profile-id "/")
                                            "owned-organizations-summary")
                                           [:vector schema:organization-summary-counts]
                                           params)]
@@ -344,7 +329,7 @@
   (request-to-nitrate cfg :post
                       (generate-nitrate-uri
                        "api/users/"
-                       profile-id
+                       (str profile-id "/")
                        "cleanup-after-deletion")
                       nil params))
 
@@ -355,7 +340,7 @@
         team (request-to-nitrate cfg :post
                                  (generate-nitrate-uri
                                   "api/organizations/"
-                                  organization-id
+                                  (str organization-id "/")
                                   "add-team")
                                  cto/schema:team-with-organization params)
         custom-photo (when-let [logo-id (dm/get-in team [:organization :logo-id])]
@@ -372,7 +357,7 @@
     (request-to-nitrate cfg :post
                         (generate-nitrate-uri
                          "api/organizations/"
-                         organization-id
+                         (str organization-id "/")
                          "add-user")
                         schema:profile-organization params)))
 
@@ -387,7 +372,7 @@
     (request-to-nitrate cfg :post
                         (generate-nitrate-uri
                          "api/organizations/"
-                         organization-id
+                         (str organization-id "/")
                          "remove-user")
                         nil params)))
 
@@ -397,7 +382,7 @@
     (request-to-nitrate cfg :post
                         (generate-nitrate-uri
                          "api/organizations/"
-                         organization-id
+                         (str organization-id "/")
                          "remove-team")
                         nil params)))
 
@@ -454,7 +439,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/organizations/"
-                       organization-id
+                       (str organization-id "/")
                        "permissions")
                       [:map
                        [:organization-id ::sm/uuid]
@@ -468,7 +453,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/organizations/"
-                       organization-id
+                       (str organization-id "/")
                        "sso")
                       schema:nitrate-sso
                       params))
@@ -476,7 +461,7 @@
 (defn- get-organization-sso-by-team-api
   [cfg {:keys [team-id] :as params}]
   (request-to-nitrate cfg :get
-                      (generate-nitrate-uri "api/teams/" team-id "sso")
+                      (generate-nitrate-uri "api/teams/" (str team-id "/") "sso")
                       schema:nitrate-sso
                       params))
 
@@ -485,7 +470,7 @@
   (request-to-nitrate cfg :get
                       (generate-nitrate-uri
                        "api/organizations/"
-                       organization-id
+                       (str organization-id "/")
                        "members-list")
                       [:vector ::sm/uuid]
                       params))
