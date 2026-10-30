@@ -30,7 +30,6 @@
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.ds.notifications.context-notification :refer [context-notification*]]
    [app.main.ui.ds.product.loader :refer [loader*]]
-   [app.main.ui.icons :as deprecated-icon]
    [app.main.ui.jobs.progress :as jp]
    [app.util.dom :as dom]
    [app.util.i18n :as i18n :refer [tr]]
@@ -155,6 +154,20 @@
                (+ acc (count done)))
              0
              resolution))
+
+(defn- pending-library-links
+  "The library links the wizard must create for the files of a resolution:
+  one per pending entry the user chose a candidate for. The file id comes
+  from the entry and never from the key of the map: what a key holds depends
+  on the result schema of the job-def that wrote it, while the wizard indexes
+  its selection by the id of the entry."
+  [resolution selection]
+  (->> (vals resolution)
+       (mapcat (fn [{:keys [id pending]}]
+                 (keep (fn [entry]
+                         (when-let [library-id (get-in selection [id (:id entry)])]
+                           {:file-id id :library-id library-id}))
+                       pending)))))
 
 (defn- analyze-entries
   [state entries]
@@ -342,7 +355,7 @@
              [:span {:class (stl/css-case
                              :linked-library-tag true
                              :error error?)}
-              deprecated-icon/detach]])))]]))
+              [:> icon* {:icon-id i/detach}]]])))]]))
 
 (defn initialize-state
   [entries]
@@ -866,22 +879,17 @@
          (mf/deps resolution selection on-finish-import)
          (fn [event]
            (dom/prevent-default event)
-           (let [slc selection]
-             ;; For each file with pending candidates, link it to the selected libraries
-             (->> (rx/from (seq resolution))
-                  (rx/merge-map
-                   (fn [[file-id resolution-file]]
-                     (->> (rx/from (:pending resolution-file))
-                          (rx/merge-map
-                           (fn [{:keys [id]}]
-                             (when-let [selected-lib (get-in slc [file-id id])]
-                               (link-files-to-library! [file-id] selected-lib)))))))
-                  (rx/subs! (constantly nil)
-                            (constantly nil)
-                            (fn []
-                              (st/emit! (modal/hide))
-                              (when (fn? on-finish-import)
-                                (on-finish-import))))))))
+           ;; For each file with pending candidates, link it to the selected libraries
+           (->> (rx/from (pending-library-links resolution selection))
+                (rx/merge-map
+                 (fn [{:keys [file-id library-id]}]
+                   (link-files-to-library! [file-id] library-id)))
+                (rx/subs! (constantly nil)
+                          (constantly nil)
+                          (fn []
+                            (st/emit! (modal/hide))
+                            (when (fn? on-finish-import)
+                              (on-finish-import)))))))
 
         on-wizard-next
         (mf/use-fn

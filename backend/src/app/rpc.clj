@@ -124,9 +124,18 @@
                              (cond-> (and (not (uuid? session-pid))
                                           (uuid? token-pid))
                                (-> (assoc ::auth-type :token)
-                                   (assoc ::token-perms (set (::actoken/perms request #{})))))
+                                   (assoc ::token-perms (set (::actoken/perms request #{})))
+                                   (assoc ::token-type (::actoken/type request))))
                              (cond-> key-id
-                               (assoc ::auth-key-id key-id)))
+                               (assoc ::auth-key-id key-id))
+                             ;; Server-side only: request bodies cannot forge
+                             ;; it (qualified keys are stripped before the
+                             ;; merge). Upload maps are only trusted when they
+                             ;; arrive over multipart.
+                             (assoc ::is-multipart
+                                    (str/starts-with?
+                                     (str (yreq/get-header request "content-type"))
+                                     "multipart/")))
 
             data         (with-meta data
                            {::http/request request})
@@ -163,10 +172,12 @@
   [_ f mdata]
   (let [required-auth?      (::auth mdata true)
         required-auth-type  (::auth-type mdata)
+        required-token-type (::token-type mdata)
         required-perms      (into #{} (::perms mdata))]
     (fn [cfg params]
       (let [profile-id  (::profile-id params)
             auth-type   (::auth-type params)
+            token-type  (::token-type params)
             token-perms (set (::token-perms params #{}))]
         (cond
           (and required-auth? (not (uuid? profile-id)))
@@ -174,8 +185,13 @@
                     :code :authentication-required
                     :hint "authentication required for this endpoint")
 
-          (and (= required-auth-type :token)
-               (not= auth-type :token))
+          (or (and (= required-auth-type :token)
+                   (not= auth-type :token))
+              (and required-token-type
+                   (or (not= auth-type :token)
+                       (not= required-token-type token-type)))
+              (and (= token-type "mcp")
+                   (not= required-token-type "mcp")))
           (ex/raise :type :authorization
                     :code :token-auth-required
                     :hint "access token authentication required for this endpoint")
@@ -227,10 +243,23 @@
       (fn [cfg params]
         (let [request-params (-> params meta ::http/request :params decode)]
           (if (validate request-params)
-            (let [result (f cfg (merge params (d/without-qualified request-params)))]
-              (if (instance? clojure.lang.IObj result)
-                (vary-meta result assoc :encode/json encode)
-                result))
+            (let [merged (merge params (d/without-qualified request-params))]
+              ;; Upload temp files are created server-side by the multipart
+              ;; parser, so an upload map smuggled in a transit/JSON body can
+              ;; point :path at any internal server file. Methods declare
+              ;; their upload keys with ::multipart-only-params and they are
+              ;; only accepted when ::is-multipart arrived server-side with
+              ;; the request (request bodies cannot forge qualified keys).
+              (when (some #(and (contains? merged %)
+                                (not (::is-multipart merged)))
+                          (::multipart-only-params mdata))
+                (ex/raise :type :validation
+                          :code :params-validation
+                          :hint "upload requires multipart"))
+              (let [result (f cfg merged)]
+                (if (instance? clojure.lang.IObj result)
+                  (vary-meta result assoc :encode/json encode)
+                  result)))
             (ex/raise :type :validation
                       :code :params-validation
                       ::sm/explain (explain request-params))))))
@@ -427,7 +456,8 @@
   [cfg]
   (let [cfg  (assoc cfg ::module "management" ::type "command" ::metrics-id :rpc-management-timing)
         mods (cond->> (list 'app.rpc.management.exporter
-                            'app.rpc.management.jobs)
+                            'app.rpc.management.jobs
+                            'app.rpc.management.files)
                (contains? cf/flags :admin-console)
                (cons 'app.rpc.management.nitrate))]
 
@@ -500,7 +530,7 @@
      {:middleware [[mw/cors]
                    [sec/client-header-check]
                    [session/authz cfg]
-                   [actoken/authz cfg]]
+                   [actoken/authz (assoc cfg ::actoken/allow-mcp true)]]
       :handler (make-rpc-handler methods)}]
 
     (doc/routes :methods methods
@@ -518,5 +548,5 @@
     {:middleware [[mw/cors]
                   [sec/client-header-check]
                   [session/authz cfg]
-                  [actoken/authz cfg]]
+                  [actoken/authz (assoc cfg ::actoken/allow-mcp true)]]
      :handler (make-rpc-handler methods)}]])
